@@ -93,7 +93,7 @@ func (h *CloneCommand) Run(args []string) int {
 				done <- true
 				break
 			}
-			fmt.Printf("[%v / %v] Cloning %v", project.Index, project.Total, project.Project.Name)
+			fmt.Printf("[%v / %v] Cloning %v\n", project.Index, project.Total, project.Project.Name)
 			cmd := exec.Command("git", "-C", clonePath, "clone", project.Project.SSHURL)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
