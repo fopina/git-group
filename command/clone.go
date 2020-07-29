@@ -51,11 +51,10 @@ func (h *CloneCommand) Run(args []string) int {
 		clonePath = strings.TrimLeft(client.Group, "/")
 	}
 
-	/*
-		if _, err := os.Stat(clonePath); !os.IsNotExist(err) {
-			log.Fatalf("fatal: destination path '%v' already exists and is not an empty directory.", clonePath)
-		}
-	*/
+	if _, err := os.Stat(clonePath); !os.IsNotExist(err) {
+		log.Fatalf("fatal: destination path '%v' already exists and is not an empty directory.", clonePath)
+	}
+
 	conf := WorkDirConfig{GroupURL: args[0]}
 	confPath := filepath.Join(clonePath, ".gitgroup")
 
