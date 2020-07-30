@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -96,15 +97,24 @@ func (c *GitlabClient) Authenticate(username, password string) error {
 
 // ListGroupProjects lists all projects within a group
 func (c *GitlabClient) ListGroupProjects(projects chan<- ListedProject) error {
+	return c.ListGroupProjectsWithMax(projects, 0)
+}
+
+// ListGroupProjectsWithMax lists all projects within a group
+func (c *GitlabClient) ListGroupProjectsWithMax(projects chan<- ListedProject, sample int) error {
 	c.Endpoint.Path = "api/v4/groups/" + c.Group + "/projects"
 
 	page := "1"
 	index := 1
+	perPage := "100"
+	if sample > 0 && sample < 100 {
+		perPage = strconv.Itoa(sample)
+	}
 
 	for page != "" {
 		data := url.Values{
 			"page":     {page},
-			"per_page": {"100"},
+			"per_page": {perPage},
 			"simple":   {"1"},
 			"archived": {"0"},
 		}
@@ -146,6 +156,11 @@ func (c *GitlabClient) ListGroupProjects(projects chan<- ListedProject) error {
 		for _, project := range res {
 			projects <- ListedProject{Index: index, Total: total, Project: project}
 			index++
+			sample--
+			// if sample is (starts with) 0, there is no limit
+			if sample == 0 {
+				return nil
+			}
 		}
 	}
 

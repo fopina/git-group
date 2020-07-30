@@ -41,3 +41,4 @@ remote: Total 10 (delta 2), reused 0 (delta 0), pack-reused 0
 * [ ] github integration
 * [ ] Support both login and providing access token directly (required for 2FA users)
 * [ ] search filters for `clone` command
+* [ ] parallel cloning

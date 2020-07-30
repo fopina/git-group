@@ -7,5 +7,8 @@ const repo = "fopina/git-group"
 
 // WorkDirConfig persists the options used to initially clone a group to re-use them for pull commands
 type WorkDirConfig struct {
-	GroupURL string
+	GroupURL   string
+	Depth      int
+	SampleSize int
+	Recursive  bool
 }
