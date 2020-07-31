@@ -34,8 +34,8 @@ remote: Total 10 (delta 2), reused 0 (delta 0), pack-reused 0
 
 * [x] gitlab integration
 * [x] `clone X Y` creates Y directory, saves clone options in Y/.git-group and clones every repo
+* [x] `clone` CLI options as `git clone`: `--depth`, `--recursive` ...
 * [ ] `pull` inside a git-group directory (or subdirectory) will pull every repository already cloned - flag for cloning new ones
-* [ ] `clone` CLI options as `git clone`: `--depth`, `--recursive` ...
 * [ ] `clone` to handle subgroups
 * [ ] `clone` to handle users and organizations as well (not only groups)
 * [ ] github integration

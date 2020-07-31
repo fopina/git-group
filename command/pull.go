@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,7 +14,8 @@ import (
 // PullCommand implements the cli.Command interface to run git pull on every cloned project in group
 type PullCommand struct {
 	Meta
-	That string
+	WorkDirConfig
+	WorkDir string
 }
 
 // Synopsis ...
@@ -39,12 +39,13 @@ func (h *PullCommand) flagSet() *flag.FlagSet {
 	flags.Usage = func() {
 		h.UI.Output(h.Help())
 	}
-	flags.StringVarP(&h.That, "that", "t", "", "profile to use")
+	flags.StringVarP(&h.WorkDir, "work-dir", "w", ".", "existing git group working directory, default to current dir")
 	return &flags
 }
 
 func (h *PullCommand) parseArgs(args []string) error {
 	err := h.flagSet().Parse(args)
+
 	return err
 }
 
@@ -52,29 +53,46 @@ func (h *PullCommand) parseArgs(args []string) error {
 func (h *PullCommand) Run(args []string) int {
 	err := h.parseArgs(args)
 	h.Meta.FatalError(err)
-	groupConf, err := utils.FindConfig(".")
+
+	groupConf, err := utils.FindConfig(h.WorkDir)
 	if os.IsNotExist(err) {
-		log.Fatal("fatal: .gitgroup not found in current directory  (or any of the parent directories)")
+		h.Meta.Fatal("fatal: .gitgroup not found in current directory  (or any of the parent directories)")
 	}
-	if err != nil {
-		log.Fatal(err)
-	}
+	h.Meta.FatalError(err)
+
 	groupDir := filepath.Dir(groupConf)
 	fileInfo, err := ioutil.ReadDir(groupDir)
-	if err != nil {
-		log.Fatal(err)
-	}
+	h.Meta.FatalError(err)
+
+	var targets []string
+
 	for _, file := range fileInfo {
 		if file.IsDir() {
-			fmt.Printf("[%v / %v] Pulling %v\n", 1, 1, file.Name())
-			cmd := exec.Command("git", "-C", filepath.Join(groupDir, file.Name()), "pull")
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
-			if err != nil {
-				log.Fatal(err)
-			}
+			targets = append(targets, file.Name())
 		}
 	}
+
+	var cloneErrors []string
+	total := len(targets)
+	for i, file := range targets {
+		fmt.Printf("[%v / %v] Pulling %v\n", i+1, total, file)
+		cmd := exec.Command("git", "-C", filepath.Join(groupDir, file), "pull")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			// no concurrency at the moment, all good
+			cloneErrors = append(cloneErrors, file)
+		}
+	}
+
+	if len(cloneErrors) > 0 {
+		h.UI.Error("Failed to pull for some repositories")
+		for _, err := range cloneErrors {
+			h.Meta.UI.Error(fmt.Sprintf("- %v", err))
+		}
+		return 1
+	}
+
 	return 0
 }

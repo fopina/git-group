@@ -139,6 +139,13 @@ func (h *CloneCommand) Run(args []string) int {
 	h.Meta.FatalError(err)
 	close(projects)
 	<-done
+	if len(cloneErrors) > 0 {
+		h.UI.Error("Failed to clone some repositories")
+		for _, err := range cloneErrors {
+			h.Meta.UI.Error(fmt.Sprintf("- %v", err))
+		}
+		return 1
+	}
 
 	return 0
 }
