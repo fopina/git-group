@@ -1,12 +1,8 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -66,33 +62,30 @@ func (h *CloneCommand) parseArgs(args []string) error {
 	return err
 }
 
-func (h *CloneCommand) worker(clonePath string) {
+func cloneWorker(clonePath string, threadCmd *MultiThread, configCmd *WorkDirConfig, showProgress bool) {
 	var output []byte
 
-	for targetInt := range h.inputChannel {
+	for targetInt := range threadCmd.inputChannel {
 		var result cloneResult
 		result.project = targetInt.(utils.ListedProject)
-		cmdArgs := []string{"-C", clonePath, "clone"}
-		if h.Depth > 0 {
-			cmdArgs = append(cmdArgs, "--depth", strconv.Itoa(h.Depth))
+		cmdArgs := []string{"clone"}
+		if configCmd.Depth > 0 {
+			cmdArgs = append(cmdArgs, "--depth", strconv.Itoa(configCmd.Depth))
 		}
-		if h.Recursive {
+		if configCmd.Recursive {
 			cmdArgs = append(cmdArgs, "--recursive")
 		}
 		cmdArgs = append(cmdArgs, result.project.Project.SSHURL)
-		cmd := exec.Command("git", cmdArgs...)
-		if h.Progress {
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			result.err = cmd.Run()
-		} else {
-			output, result.err = cmd.CombinedOutput()
-			if result.err != nil {
-				result.output = string(output)
-			}
+		output, result.err = utils.GitCommand(showProgress, clonePath, cmdArgs...)
+		if result.err != nil {
+			result.output = string(output)
 		}
-		h.outputChannel <- result
+		threadCmd.outputChannel <- result
 	}
+}
+
+func (h *CloneCommand) worker(clonePath string) {
+	cloneWorker(clonePath, &h.MultiThread, &h.WorkDirConfig, h.Progress)
 }
 
 // Run ...
@@ -125,15 +118,10 @@ func (h *CloneCommand) Run(args []string) int {
 	err = client.Authenticate(username, password)
 	h.Meta.FatalError(err)
 
-	confPath := filepath.Join(clonePath, ".gitgroup")
-
-	file, err := json.MarshalIndent(h.WorkDirConfig, "", " ")
-	h.Meta.FatalError(err)
-
 	err = os.MkdirAll(clonePath, 0700)
 	h.Meta.FatalError(err)
 
-	err = ioutil.WriteFile(confPath, file, 0600)
+	err = h.SaveConfig(clonePath)
 	h.Meta.FatalError(err)
 
 	var cloneErrors []string

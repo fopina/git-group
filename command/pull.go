@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/fopina/git-group/utils"
@@ -19,6 +18,7 @@ type PullCommand struct {
 	MultiThread
 	Progress bool
 	WorkDir  string
+	CloneNew bool
 }
 
 type pullResult struct {
@@ -51,6 +51,7 @@ func (h *PullCommand) flagSet() *flag.FlagSet {
 	}
 	flags.StringVarP(&h.WorkDir, "work-dir", "w", ".", "existing git group working directory, default to current dir")
 	flags.BoolVarP(&h.Progress, "progress", "p", false, "show output from git pull")
+	flags.BoolVarP(&h.CloneNew, "clone-new", "n", false, "also clone new repositories in the group")
 	return &flags
 }
 
@@ -75,16 +76,9 @@ func (h *PullCommand) worker(groupDir string) {
 		target = targetInt.(string)
 		var result pullResult
 		result.repo = target
-		cmd := exec.Command("git", "-C", filepath.Join(groupDir, target), "pull")
-		if h.Progress {
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			result.err = cmd.Run()
-		} else {
-			output, result.err = cmd.CombinedOutput()
-			if result.err != nil {
-				result.output = string(output)
-			}
+		output, result.err = utils.GitCommand(h.Progress, filepath.Join(groupDir, target), "pull")
+		if result.err != nil {
+			result.output = string(output)
 		}
 		h.outputChannel <- result
 	}
@@ -95,13 +89,12 @@ func (h *PullCommand) Run(args []string) int {
 	err := h.parseArgs(args)
 	h.Meta.FatalError(err)
 
-	groupConf, err := utils.FindConfig(h.WorkDir)
+	groupDir, err := h.LoadConfig(h.WorkDir)
 	if os.IsNotExist(err) {
 		h.Meta.Fatal("fatal: .gitgroup not found in current directory  (or any of the parent directories)")
 	}
 	h.Meta.FatalError(err)
 
-	groupDir := filepath.Dir(groupConf)
 	fileInfo, err := ioutil.ReadDir(groupDir)
 	h.Meta.FatalError(err)
 
@@ -111,21 +104,64 @@ func (h *PullCommand) Run(args []string) int {
 		h.worker(groupDir)
 	})
 
-	var repos []string
+	// not just as set() but also to review which ones no longer exist in the group
+	repos := make(map[string]bool)
 
 	for _, file := range fileInfo {
 		if file.IsDir() {
-			repos = append(repos, file.Name())
+			repos[file.Name()] = false
+		}
+	}
+
+	var newOnes []utils.ListedProject
+
+	if h.CloneNew {
+		// find new repos
+		username, password, err := h.Meta.AskCredentials()
+		h.Meta.FatalError(err)
+
+		client, err := utils.NewGitlabClient(h.GroupURL)
+		h.Meta.FatalError(err)
+
+		err = client.Authenticate(username, password)
+		h.Meta.FatalError(err)
+
+		// FIXME: refactor list method to proper iterator!!!
+		x := make(chan interface{}, 1)
+		go func() {
+			err = client.ListGroupProjects(x)
+			close(x)
+		}()
+		for y := range x {
+			yy := y.(utils.ListedProject)
+			_, ok := repos[yy.Project.Name]
+			if ok {
+				// track for non-deletion
+				repos[yy.Project.Name] = true
+			} else {
+				newOnes = append(newOnes, yy)
+			}
+		}
+	}
+
+	skipped := 0
+	for k, v := range repos {
+		if !v {
+			skipped++
+			h.UI.Warn(fmt.Sprintf("%s no longer exists (or has been archived)", k))
 		}
 	}
 
 	h.FeedWorkers(func() {
-		for _, repo := range repos {
-			h.inputChannel <- repo
+		for repo, v := range repos {
+			if v {
+				h.inputChannel <- repo
+				break
+			}
 		}
 	})
 
-	h.Start(len(repos))
+	h.Start(len(repos) - skipped)
 	var result pullResult
 	for resultInt := range h.outputChannel {
 		result = resultInt.(pullResult)
@@ -138,8 +174,32 @@ func (h *PullCommand) Run(args []string) int {
 	}
 	h.bar.Finish()
 
+	if len(newOnes) > 0 {
+		// FIXME: refactor this to more re-usable code (with CloneCommand)
+		h.StartWorkers(func() {
+			cloneWorker(groupDir, &h.MultiThread, &h.WorkDirConfig, h.Progress)
+		})
+		h.FeedWorkers(func() {
+			for _, p := range newOnes {
+				h.inputChannel <- p
+			}
+		})
+		h.Start(len(newOnes))
+		var result cloneResult
+		for resultInt := range h.outputChannel {
+			result = resultInt.(cloneResult)
+			h.bar.Increment()
+			if result.err != nil {
+				h.UI.Error(fmt.Sprintf("%v failed (%v)\n", result.project.Project.SSHURL, result.err))
+				h.UI.Error(result.output)
+				cloneErrors = append(cloneErrors, fmt.Sprintf("%v (%v)", result.project.Project.Name, result.project.Project.SSHURL))
+			}
+		}
+		h.bar.Finish()
+	}
+
 	if len(cloneErrors) > 0 {
-		h.UI.Error("Failed to pull for some repositories")
+		h.UI.Error("Failed to pull/clone some repositories")
 		for _, err := range cloneErrors {
 			h.Meta.UI.Error(fmt.Sprintf("- %v", err))
 		}

@@ -2,24 +2,18 @@ package utils
 
 import (
 	"os"
-	"path/filepath"
+	"os/exec"
 )
 
-// FindConfig will return the first .gitgroup file that it finds going up the directory tree
-func FindConfig(path string) (string, error) {
-	x, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
+// GitCommand wraps git command execution
+func GitCommand(showProgress bool, workDir string, args ...string) ([]byte, error) {
+	cmdArgs := []string{"-C", workDir}
+	cmdArgs = append(cmdArgs, args...)
+	cmd := exec.Command("git", cmdArgs...)
+	if showProgress {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return nil, cmd.Run()
 	}
-	y := ""
-	var conf string
-	for y != x {
-		y = x
-		conf = filepath.Join(y, ".gitgroup")
-		if _, err := os.Stat(conf); !os.IsNotExist(err) {
-			return conf, nil
-		}
-		x = filepath.Dir(y)
-	}
-	return "", os.ErrNotExist
+	return cmd.CombinedOutput()
 }

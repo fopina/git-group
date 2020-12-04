@@ -25,12 +25,14 @@ type MultiThread struct {
 	outputChannel chan interface{}
 }
 
+// FlagSet adds MultiThread specific flags
 func (h *MultiThread) FlagSet() *flag.FlagSet {
 	flags := flag.FlagSet{}
 	flags.IntVarP(&h.threads, "threads", "t", 4, "number of working threads")
 	return &flags
 }
 
+// StartWorkers initializes the waiting group and kicks the worker goroutines
 func (h *MultiThread) StartWorkers(fn func()) {
 	h.wg.Add(h.threads)
 	h.inputChannel = make(chan interface{}, h.threads)
@@ -44,6 +46,7 @@ func (h *MultiThread) StartWorkers(fn func()) {
 	}
 }
 
+// FeedWorkers manages input channel, closes it after "fn" finishes and closes output channel after workers finish
 func (h *MultiThread) FeedWorkers(fn func()) {
 	go func() {
 		fn()
