@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -29,10 +30,15 @@ type gitlabProject struct {
 	WEBURL string `json:"web_url"`
 }
 
+type optionalInt struct {
+	Int  int
+	Null bool
+}
+
 // ListedProject wraps a gitlabProject with iteration status to be sent through the ListGroupProjects channel
 type ListedProject struct {
 	Index   int
-	Total   string
+	Total   optionalInt
 	Project gitlabProject
 }
 
@@ -55,7 +61,7 @@ func NewGitlabClient(gitlabLink string) (*GitlabClient, error) {
 	return &GitlabClient{
 		Client:   netClient,
 		Endpoint: baseURL,
-		Group:    projectURL.Path,
+		Group:    strings.Trim(projectURL.Path, "/"),
 	}, nil
 }
 
@@ -96,13 +102,15 @@ func (c *GitlabClient) Authenticate(username, password string) error {
 }
 
 // ListGroupProjects lists all projects within a group
-func (c *GitlabClient) ListGroupProjects(projects chan<- ListedProject) error {
+func (c *GitlabClient) ListGroupProjects(projects chan interface{}) error {
 	return c.ListGroupProjectsWithMax(projects, 0)
 }
 
 // ListGroupProjectsWithMax lists all projects within a group
-func (c *GitlabClient) ListGroupProjectsWithMax(projects chan<- ListedProject, sample int) error {
-	c.Endpoint.Path = "api/v4/groups/" + c.Group + "/projects"
+func (c *GitlabClient) ListGroupProjectsWithMax(projects chan interface{}, sample int) error {
+	c.Endpoint.Path = "api/v4/groups/" + strings.ReplaceAll(c.Group, "/", "%2F") + "/projects"
+	// FIXME: url.URL.String() uses EscapedPath() (instead of RawPath()) and re-escapes %2F...
+	endpoint := strings.ReplaceAll(c.Endpoint.String(), "%252F", "%2F")
 
 	page := "1"
 	index := 1
@@ -119,7 +127,7 @@ func (c *GitlabClient) ListGroupProjectsWithMax(projects chan<- ListedProject, s
 			"archived": {"0"},
 		}
 
-		req, err := http.NewRequest("GET", c.Endpoint.String()+"?"+data.Encode(), nil)
+		req, err := http.NewRequest("GET", endpoint+"?"+data.Encode(), nil)
 		if err != nil {
 			return err
 		}
@@ -134,9 +142,10 @@ func (c *GitlabClient) ListGroupProjectsWithMax(projects chan<- ListedProject, s
 			return fmt.Errorf("gitlab returned %v", resp.StatusCode)
 		}
 
-		total := "?"
+		total := optionalInt{0, true}
 		if len(resp.Header["X-Total"]) > 0 {
-			total = resp.Header["X-Total"][0]
+			total.Int, err = strconv.Atoi(resp.Header["X-Total"][0])
+			total.Null = err != nil
 		}
 
 		if len(resp.Header["X-Next-Page"]) > 0 {
