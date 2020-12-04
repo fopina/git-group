@@ -15,7 +15,16 @@ import (
 type PullCommand struct {
 	Meta
 	WorkDirConfig
-	WorkDir string
+	ProgressBar
+	MultiThread
+	Progress bool
+	WorkDir  string
+}
+
+type pullResult struct {
+	repo   string
+	err    error
+	output string
 }
 
 // Synopsis ...
@@ -36,17 +45,49 @@ Options:
 
 func (h *PullCommand) flagSet() *flag.FlagSet {
 	flags := flag.FlagSet{}
+	flags.AddFlagSet(h.MultiThread.FlagSet())
 	flags.Usage = func() {
 		h.UI.Output(h.Help())
 	}
 	flags.StringVarP(&h.WorkDir, "work-dir", "w", ".", "existing git group working directory, default to current dir")
+	flags.BoolVarP(&h.Progress, "progress", "p", false, "show output from git pull")
 	return &flags
 }
 
 func (h *PullCommand) parseArgs(args []string) error {
-	err := h.flagSet().Parse(args)
+	flags := h.flagSet()
+	err := flags.Parse(args)
+	if err != nil {
+		return err
+	}
+	extra := flags.Args()
+	if len(extra) > 0 {
+		return fmt.Errorf("this command does not have any positional parameters (%v)", extra)
+	}
+	return nil
+}
 
-	return err
+func (h *PullCommand) worker(groupDir string) {
+	var output []byte
+	var target string
+
+	for targetInt := range h.inputChannel {
+		target = targetInt.(string)
+		var result pullResult
+		result.repo = target
+		cmd := exec.Command("git", "-C", filepath.Join(groupDir, target), "pull")
+		if h.Progress {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			result.err = cmd.Run()
+		} else {
+			output, result.err = cmd.CombinedOutput()
+			if result.err != nil {
+				result.output = string(output)
+			}
+		}
+		h.outputChannel <- result
+	}
 }
 
 // Run ...
@@ -64,27 +105,38 @@ func (h *PullCommand) Run(args []string) int {
 	fileInfo, err := ioutil.ReadDir(groupDir)
 	h.Meta.FatalError(err)
 
-	var targets []string
+	var cloneErrors []string
+
+	h.StartWorkers(func() {
+		h.worker(groupDir)
+	})
+
+	var repos []string
 
 	for _, file := range fileInfo {
 		if file.IsDir() {
-			targets = append(targets, file.Name())
+			repos = append(repos, file.Name())
 		}
 	}
 
-	var cloneErrors []string
-	total := len(targets)
-	for i, file := range targets {
-		fmt.Printf("[%v / %v] Pulling %v\n", i+1, total, file)
-		cmd := exec.Command("git", "-C", filepath.Join(groupDir, file), "pull")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err := cmd.Run()
-		if err != nil {
-			// no concurrency at the moment, all good
-			cloneErrors = append(cloneErrors, file)
+	h.FeedWorkers(func() {
+		for _, repo := range repos {
+			h.inputChannel <- repo
+		}
+	})
+
+	h.Start(len(repos))
+	var result pullResult
+	for resultInt := range h.outputChannel {
+		result = resultInt.(pullResult)
+		h.bar.Increment()
+		if result.err != nil {
+			h.UI.Error(fmt.Sprintf("%v failed (%v)\n", result.repo, result.err))
+			h.UI.Error(result.output)
+			cloneErrors = append(cloneErrors, result.repo)
 		}
 	}
+	h.bar.Finish()
 
 	if len(cloneErrors) > 0 {
 		h.UI.Error("Failed to pull for some repositories")
