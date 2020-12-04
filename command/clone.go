@@ -18,8 +18,16 @@ import (
 type CloneCommand struct {
 	Meta
 	WorkDirConfig
+	ProgressBar
+	MultiThread
 	Progress bool
 	Args     []string
+}
+
+type cloneResult struct {
+	project utils.ListedProject
+	err     error
+	output  string
 }
 
 // Synopsis ...
@@ -43,6 +51,7 @@ func (h *CloneCommand) flagSet() *flag.FlagSet {
 	flags.Usage = func() {
 		h.UI.Output(h.Help())
 	}
+	flags.AddFlagSet(h.MultiThread.FlagSet())
 	flags.BoolVarP(&h.Progress, "progress", "p", false, "show output from git clone")
 	flags.IntVarP(&h.SampleSize, "sample", "s", 0, "number of repos to clone, useful to quickly take samples of larger groups")
 	flags.IntVarP(&h.Depth, "depth", "", 0, "create a shallow clone of that depth (passed to git clone)")
@@ -55,6 +64,35 @@ func (h *CloneCommand) parseArgs(args []string) error {
 	err := flags.Parse(args)
 	h.Args = flags.Args()
 	return err
+}
+
+func (h *CloneCommand) worker(clonePath string) {
+	var output []byte
+
+	for targetInt := range h.inputChannel {
+		var result cloneResult
+		result.project = targetInt.(utils.ListedProject)
+		cmdArgs := []string{"-C", clonePath, "clone"}
+		if h.Depth > 0 {
+			cmdArgs = append(cmdArgs, "--depth", strconv.Itoa(h.Depth))
+		}
+		if h.Recursive {
+			cmdArgs = append(cmdArgs, "--recursive")
+		}
+		cmdArgs = append(cmdArgs, result.project.Project.SSHURL)
+		cmd := exec.Command("git", cmdArgs...)
+		if h.Progress {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			result.err = cmd.Run()
+		} else {
+			output, result.err = cmd.CombinedOutput()
+			if result.err != nil {
+				result.output = string(output)
+			}
+		}
+		h.outputChannel <- result
+	}
 }
 
 // Run ...
@@ -98,47 +136,31 @@ func (h *CloneCommand) Run(args []string) int {
 	err = ioutil.WriteFile(confPath, file, 0600)
 	h.Meta.FatalError(err)
 
-	projects := make(chan utils.ListedProject)
-	done := make(chan bool)
 	var cloneErrors []string
-	go func() {
-		for {
-			project, ok := <-projects
-			if !ok {
-				break
-			}
-			h.UI.Output(fmt.Sprintf("[%v / %v] Cloning %v", project.Index, project.Total, project.Project.Name))
-			cmdArgs := []string{"-C", clonePath, "clone"}
-			if h.Depth > 0 {
-				cmdArgs = append(cmdArgs, "--depth", strconv.Itoa(h.Depth))
-			}
-			if h.Recursive {
-				cmdArgs = append(cmdArgs, "--recursive")
-			}
-			cmdArgs = append(cmdArgs, project.Project.SSHURL)
-			cmd := exec.Command("git", cmdArgs...)
-			var err error
-			if h.Progress {
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err = cmd.Run()
-			} else {
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					h.UI.Error(string(output))
-				}
-			}
-			if err != nil {
-				// no concurrency at the moment, all good
-				cloneErrors = append(cloneErrors, fmt.Sprintf("%v (%v)", project.Project.Name, project.Project.SSHURL))
-			}
+
+	h.StartWorkers(func() {
+		h.worker(clonePath)
+	})
+
+	h.FeedWorkers(func() {
+		err = client.ListGroupProjectsWithMax(h.inputChannel, h.SampleSize)
+		h.Meta.FatalError(err)
+	})
+
+	h.Start(-1)
+	var result cloneResult
+	for resultInt := range h.outputChannel {
+		result = resultInt.(cloneResult)
+		h.bar.SetTotal(int64(result.project.Total.Int))
+		h.bar.Increment()
+		if result.err != nil {
+			h.UI.Error(fmt.Sprintf("%v failed (%v)\n", result.project.Project.SSHURL, result.err))
+			h.UI.Error(result.output)
+			cloneErrors = append(cloneErrors, fmt.Sprintf("%v (%v)", result.project.Project.Name, result.project.Project.SSHURL))
 		}
-		done <- true
-	}()
-	err = client.ListGroupProjectsWithMax(projects, h.SampleSize)
-	h.Meta.FatalError(err)
-	close(projects)
-	<-done
+	}
+	h.bar.Finish()
+
 	if len(cloneErrors) > 0 {
 		h.UI.Error("Failed to clone some repositories")
 		for _, err := range cloneErrors {
