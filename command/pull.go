@@ -109,11 +109,13 @@ func (h *PullCommand) Run(args []string) int {
 
 	for _, file := range fileInfo {
 		if file.IsDir() {
-			repos[file.Name()] = false
+			// if no CloneNew, all repos to be considered active
+			repos[file.Name()] = !h.CloneNew
 		}
 	}
 
 	var newOnes []utils.ListedProject
+	skipped := 0
 
 	if h.CloneNew {
 		// find new repos
@@ -142,13 +144,12 @@ func (h *PullCommand) Run(args []string) int {
 				newOnes = append(newOnes, yy)
 			}
 		}
-	}
 
-	skipped := 0
-	for k, v := range repos {
-		if !v {
-			skipped++
-			h.UI.Warn(fmt.Sprintf("%s no longer exists (or has been archived)", k))
+		for k, v := range repos {
+			if !v {
+				skipped++
+				h.UI.Warn(fmt.Sprintf("%s no longer exists (or has been archived)", k))
+			}
 		}
 	}
 
@@ -156,7 +157,6 @@ func (h *PullCommand) Run(args []string) int {
 		for repo, v := range repos {
 			if v {
 				h.inputChannel <- repo
-				break
 			}
 		}
 	})
