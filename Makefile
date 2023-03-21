@@ -27,4 +27,4 @@ release:
   				-v /var/run/docker.sock:/var/run/docker.sock \
   				-w /go/src/git-group \
 				-e VERSION \
-  				goreleaser/goreleaser --skip-publish --snapshot --rm-dist
+  				goreleaser/goreleaser --skip-publish --snapshot --clean
