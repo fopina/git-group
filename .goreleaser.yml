@@ -11,8 +11,15 @@ builds:
     goarch:
       - amd64
       - arm
+      - arm64
     goarm:
-      - 7
+      - '7'
+    ignore:
+      - goos: windows
+        goarch: arm
+        goarm: '7'
+      - goos: windows
+        goarch: arm64
     ldflags:
       - -s -w -X github.com/fopina/git-group/command.version={{.Version}} -X github.com/fopina/git-group/command.date={{.Date}}
 archives:
@@ -21,6 +28,7 @@ archives:
         format: zip
     files:
       - none*
+    rlcp: true
 checksum:
   name_template: "checksums.txt"
 snapshot:
