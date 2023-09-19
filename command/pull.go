@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -95,7 +94,7 @@ func (h *PullCommand) Run(args []string) int {
 	}
 	h.Meta.FatalError(err)
 
-	fileInfo, err := ioutil.ReadDir(groupDir)
+	fileInfo, err := os.ReadDir(groupDir)
 	h.Meta.FatalError(err)
 
 	var cloneErrors []string

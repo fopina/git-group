@@ -37,16 +37,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: v${{ steps.prepare.outputs.tag_name }}
 
-      -
-        name: Update homebrew-tap
-        uses: fopina/homebrew-tap@bump-action-v1
-        with:
-          token: ${{ secrets.PAT }}
-          formula_class: GitGroup
-          formula_file: git-group
-          description: Easily clone all the repositories from a group or organization
-          url: https://github.com/fopina/git-group/releases/download/v${{ steps.prepare.outputs.tag_name }}/git-group_${{ steps.prepare.outputs.tag_name }}_darwin_amd64.tar.gz
-          license: MIT
-          version: '${{ steps.prepare.outputs.tag_name }}'
-          bin: git-group
-          release: ./dist/git-group_${{ steps.prepare.outputs.tag_name }}_darwin_amd64.tar.gz
+      # -
+      #   name: Update homebrew-tap
+      #   uses: fopina/homebrew-tap@bump-action-v1
+      #   with:
+      #     token: ${{ secrets.PAT }}
+      #     formula_class: GitGroup
+      #     formula_file: git-group
+      #     description: Easily clone all the repositories from a group or organization
+      #     url: https://github.com/fopina/git-group/releases/download/v${{ steps.prepare.outputs.tag_name }}/git-group_${{ steps.prepare.outputs.tag_name }}_darwin_amd64.tar.gz
+      #     license: MIT
+      #     version: '${{ steps.prepare.outputs.tag_name }}'
+      #     bin: git-group
+      #     release: ./dist/git-group_${{ steps.prepare.outputs.tag_name }}_darwin_amd64.tar.gz
