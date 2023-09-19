@@ -33,7 +33,7 @@ func (m *Meta) FatalError(v error) {
 
 // AskCredentials prompts for username and password
 func (m *Meta) AskCredentials() (string, string, error) {
-	username, err := m.UI.Ask("Username:")
+	username, err := m.UI.Ask("Username (use \"token\" if you're providing an API token as password):")
 	if err != nil {
 		return "", "", err
 	}

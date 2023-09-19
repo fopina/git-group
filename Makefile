@@ -13,7 +13,7 @@ test:
 
 clean:
 	@go clean
-	@rm $(OUTPUT_FILE) -f
+	@rm -f $(OUTPUT_FILE)
 
 build:
 	@mkdir -p dist

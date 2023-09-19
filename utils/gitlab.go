@@ -67,6 +67,11 @@ func NewGitlabClient(gitlabLink string) (*GitlabClient, error) {
 
 // Authenticate authenticates against a Gitlab instance, storing the access_token
 func (c *GitlabClient) Authenticate(username, password string) error {
+	if username == "token" {
+		c.Token = password
+		return nil
+	}
+
 	c.Endpoint.Path = "oauth/token"
 
 	data := url.Values{
