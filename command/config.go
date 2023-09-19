@@ -2,13 +2,11 @@ package commands
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
 
 var version string = "DEV"
-var date string
 
 const repo = "fopina/git-group"
 
@@ -29,7 +27,7 @@ func (h *WorkDirConfig) SaveConfig(groupDir string) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(confPath, file, 0600)
+	err = os.WriteFile(confPath, file, 0600)
 	return err
 }
 
@@ -58,7 +56,7 @@ func (h *WorkDirConfig) LoadConfig(currentDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data, err := ioutil.ReadFile(groupConf)
+	data, err := os.ReadFile(groupConf)
 	if err != nil {
 		return "", err
 	}
