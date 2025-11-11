@@ -1,6 +1,6 @@
 module github.com/fopina/git-group
 
-go 1.19
+go 1.23.0
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
@@ -37,7 +37,7 @@ require (
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
-	github.com/ulikunitz/xz v0.5.11 // indirect
+	github.com/ulikunitz/xz v0.5.14 // indirect
 	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/oauth2 v0.6.0 // indirect
