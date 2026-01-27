@@ -1,4 +1,9 @@
 # git-group
+
+> **DEPRECATED**  
+> Gitlab [official CLI](https://docs.gitlab.com/cli/) supports this now `glab clone -g GROUP`
+
+
 Easily clone all the repositories from a group or organization
 
 This utility requires `git` installed. It could use [go-git](https://github.com/go-git/go-git) but it would fatten the binary with very little benefit as `git` is expected to be installed.
